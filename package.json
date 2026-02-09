@@ -1,0 +1,16 @@
+{
+  "name": "mcp-discord-bridge",
+  "version": "1.0.0",
+  "description": "MCP server that gives Claude Code native Discord tools — read, send, reply, react, and check mentions",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
