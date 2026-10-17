@@ -18,6 +18,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
+import { loadAliases, namesFromMessages, resolveMentions, hasPlainMention } from './mentions.js';
 
 const DISCORD_API = 'https://discord.com/api/v10';
 const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
@@ -33,6 +34,8 @@ if (!GUILD_ID) {
   console.error('DISCORD_GUILD_ID environment variable is required');
   process.exit(1);
 }
+
+const MENTION_ALIASES = loadAliases();
 
 // Channel name -> ID cache
 let channelCache = null;
@@ -81,6 +84,22 @@ async function getBotUserId() {
   const me = await discordFetch('/users/@me');
   botUserId = me.id;
   return botUserId;
+}
+
+// Plain "@name" -> real "<@id>" mention (see mentions.js). Never blocks a send: on any lookup
+// failure the built-in aliases alone apply.
+async function withMentions(message, channelId) {
+  if (!hasPlainMention(message)) return message;
+  let names = { ...MENTION_ALIASES };
+  try {
+    const recent = await discordFetch(`/channels/${channelId}/messages?limit=50`);
+    names = { ...namesFromMessages(recent), ...MENTION_ALIASES };
+  } catch {
+    // keep the aliases
+  }
+  let selfId = null;
+  try { selfId = await getBotUserId(); } catch { /* no self filter */ }
+  return resolveMentions(message, names, selfId);
 }
 
 function formatMessage(msg) {
@@ -210,9 +229,10 @@ class DiscordBridgeMCP {
 
   async handleSend({ message, channel }) {
     const channelId = await resolveChannel(channel || DEFAULT_CHANNEL);
+    const content = await withMentions(message, channelId);
     const result = await discordFetch(`/channels/${channelId}/messages`, {
       method: 'POST',
-      body: JSON.stringify({ content: message }),
+      body: JSON.stringify({ content }),
     });
 
     return {
@@ -249,10 +269,11 @@ class DiscordBridgeMCP {
 
   async handleReply({ message_id, channel, message }) {
     const channelId = await resolveChannel(channel);
+    const content = await withMentions(message, channelId);
     const result = await discordFetch(`/channels/${channelId}/messages`, {
       method: 'POST',
       body: JSON.stringify({
-        content: message,
+        content,
         message_reference: { message_id },
       }),
     });
